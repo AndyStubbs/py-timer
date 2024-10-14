@@ -3,13 +3,16 @@ import sys
 import json
 import time
 
+from pgzero.keyboard import Keyboard
+
 
 flags = [
-	("help", "-h", "--help", "Show help"),
-	("list", "-l", "--list", "Show list of timers."),
-	("pause", "-p", "--pause", "Pause a timer."),
-	("reset", "-r", "--reset", "Reset a timer."),
-	("start", "-s", "--start", "Start/resume a new.")
+	( "help", "-h", "--help", "Show help" ),
+	( "list", "-l", "--list", "Show list of timers." ),
+	( "pause", "-p", "--pause", "Pause a timer." ),
+	( "reset", "-r", "--reset", "Reset a timer." ),
+	( "start", "-s", "--start", "Start/resume a new timer." ),
+	( "tick", "-t", "--tick", "Show timers in realtime." )
 ]
 
 
@@ -32,20 +35,19 @@ command = Command()
 def start():
 	global command
 	
-	# If no timer name supplied use the unnamed timer
-	if command.timer_name == "":
-		command.timer_name = "Unnamed Timer"
-	
 	# Find the timer in timers
 	command.timer = get_timer( command.timer_name )
 	
 	# Start the timer
 	if command.flags[ "start" ]:
 		if not command.timer:
+			if command.timer_name == "":
+				command.timer_name = "Unnamed Timer"
 			create_new_timer()
 		else:
 			if command.timer[ "track_start" ] == 0:
 				command.timer[ "track_start" ] = time.time()
+				command.timer[ "status" ] = "running"
 			else:
 				print( "Cannot start a timer that is already started." )
 				print_timer_status()
@@ -59,6 +61,7 @@ def start():
 		else:
 			update_elapsed( command.timer )
 			command.timer[ "track_start" ] = 0
+			command.timer[ "status" ] = "paused"
 			print( f"Pausing {command.timer_name}." )
 		print_timer_status()
 	
@@ -74,9 +77,16 @@ def start():
 	elif command.flags[ "reset" ]:
 		reset_timer()
 	
+	# Show Timer in Realtime
+	elif command.flags[ "tick" ]:
+		tick()
+	
 	# Update timer status
 	else:
-		print_timer_status()
+		if command.timer_name != "" and not get_timer( command.timer_name ):
+			create_new_timer( "paused" )
+		else:
+			print_timer_status()
 	
 	# Save the timer to file
 	save_timer_data()
@@ -95,26 +105,34 @@ def get_timer( timer_name = "" ):
 
 
 # Create a new timer
-def create_new_timer():
+def create_new_timer( status = "running" ):
 	global command
+	
+	track_start = 0
+	if status == "running":
+		track_start = time.time()
 	command.timer = {
 		"name": command.timer_name,
 		"start": time.time(),
-		"status": "running",
-		"track_start": time.time(),
+		"status": status,
+		"track_start": track_start,
 		"elapsed": 0,
 		"end": 0
 	}
 	command.timers.append( command.timer )
+	print( f"Creating new timer {command.timer['name']}." )
+	print( f"Timer is {command.timer['status']}." )
 
 
 # Reset timer
 def reset_timer():
 	if command.timer:
-		command.timers = filter( lambda timer: timer != command.timer_name, command.timers )
-		save_timer_data()
+		timer_name = command.timer_name
+		command.timers = list( filter( lambda timer: timer[ "name" ] != command.timer_name, command.timers ) )
+		command.timer_name = ""
+		print( f"Deleting {timer_name}.")
 	else:
-		print( "No timer selected cannot reset" )
+		print( "No timer selected, cannot reset." )
 
 
 # Update elapsed time
@@ -128,13 +146,18 @@ def update_elapsed( timer = None ):
 
 # Print the Timer Table
 def print_timer_table():
+	if len( command.timers ) == 0:
+		print( "There are currently no timers stored" )
+		print_help()
+		return
+	
 	# Calculate Columns
-	col_data = [ len( "  Name " ), len( "Status " ), len( "Elapsed " ) ]
+	col_data = [ len( "Name " ), len( "Status " ), len( "Elapsed " ) ]
 	for timer in command.timers:
-		if len( timer[ "name" ] ) + 2 > col_data[ 0 ]:
-			col_data[ 0 ] = len( timer[ "name" ] ) + 2
-		if len( timer[ "status" ] ) + 1 > col_data[ 1 ]:
-			col_data[ 1 ] = len( timer[ "status" ] ) + 2
+		if len( timer[ "name" ] ) + 4 > col_data[ 0 ]:
+			col_data[ 0 ] = len( timer[ "name" ] ) + 4
+		if len( timer[ "status" ] ) + 3 > col_data[ 1 ]:
+			col_data[ 1 ] = len( timer[ "status" ] ) + 3
 		f_time = format_time( timer[ "elapsed" ] )
 		if len( f_time ) + 1 > col_data[ 2 ]:
 			col_data[ 2 ] = len( f_time ) + 2
@@ -217,6 +240,24 @@ def print_help():
 		print( f"{flag[ 1 ]}, {flag[ 2 ]}".ljust( 18 ) + flag[ 3 ] )
 
 
+def tick():
+	try:
+		if os.name == "nt":
+			os.system( "cls" )
+		else:
+			os.system( "clear" )
+		while True:
+			num_lines = len( command.timers ) + 6
+			for _ in range( num_lines ):
+				sys.stdout.write( "\033[F" )
+			print_timer_table()
+			print( "Ctrl+C - to stop" )
+			time.sleep( 0.05 )
+	except KeyboardInterrupt:
+		pass
+	print()
+
+
 # Parse the command line arguments
 def parse_args():
 	global command, flags
@@ -252,6 +293,7 @@ def load_timer_data():
 		command.timers = timer_data[ "timers" ]
 		command.timer_name = timer_data[ "selected_timer_name" ]
 	else:
+		# Create an empty file if it doesn't exist
 		save_timer_data()
 
 
