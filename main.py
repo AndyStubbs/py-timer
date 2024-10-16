@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import time
+from datetime import datetime
 
 from pgzero.keyboard import Keyboard
 
@@ -36,7 +37,7 @@ def start():
 	global command
 	
 	# Find the timer in timers
-	command.timer = get_timer( command.timer_name )
+	command.timer, _ = get_timer( command.timer_name )
 	
 	# Start the timer
 	if command.flags[ "start" ]:
@@ -83,7 +84,8 @@ def start():
 	
 	# Update timer status
 	else:
-		if command.timer_name != "" and not get_timer( command.timer_name ):
+		timer, _ = get_timer( command.timer_name )
+		if command.timer_name != "" and not timer:
 			create_new_timer( "paused" )
 		else:
 			print_timer_status()
@@ -98,10 +100,11 @@ def get_timer( timer_name = "" ):
 		search = command.timer_name
 	else:
 		search = timer_name
-	for timer in command.timers:
+	for i in range( 0, len( command.timers ) ):
+		timer = command.timers[ i ]
 		if timer[ "name" ] == search:
-			return timer
-	return None
+			return timer, i
+	return None, None
 
 
 # Create a new timer
@@ -152,27 +155,32 @@ def print_timer_table():
 		return
 	
 	# Calculate Columns
-	col_data = [ len( "Name " ), len( "Status " ), len( "Elapsed " ) ]
-	for timer in command.timers:
-		if len( timer[ "name" ] ) + 4 > col_data[ 0 ]:
-			col_data[ 0 ] = len( timer[ "name" ] ) + 4
-		if len( timer[ "status" ] ) + 3 > col_data[ 1 ]:
-			col_data[ 1 ] = len( timer[ "status" ] ) + 3
+	col_data = [ len( "# " ), len( "Name " ), len( "Status " ), len( "Elapsed " ) ]
+	for i in range( len( command.timers ) ):
+		timer = command.timers[ i ]
+		if len( str( i ) ) + 2 > col_data[ 0 ]:
+			col_data[ 0 ] = len( str( i ) ) + 2
+		if len( timer[ "name" ] ) + 4 > col_data[ 1 ]:
+			col_data[ 1 ] = len( timer[ "name" ] ) + 4
+		if len( timer[ "status" ] ) + 3 > col_data[ 2 ]:
+			col_data[ 2 ] = len( timer[ "status" ] ) + 3
 		f_time = format_time( timer[ "elapsed" ] )
-		if len( f_time ) + 1 > col_data[ 2 ]:
-			col_data[ 2 ] = len( f_time ) + 2
+		if len( f_time ) + 1 > col_data[ 3 ]:
+			col_data[ 3 ] = len( f_time ) + 2
 	
 	# Print Header
 	print(
+		"# ".ljust( col_data[ 0 ] ) +
 		"* " +
-		"Name".ljust( col_data[ 0 ] ) +
-		"Status".ljust( col_data[ 1 ] ) +
-		"Elapsed".ljust( col_data[ 2 ] )
+		"Name".ljust( col_data[ 1 ] ) +
+		"Status".ljust( col_data[ 2 ] ) +
+		"Elapsed".ljust( col_data[ 3 ] )
 	)
 	print(
 		"-".ljust( col_data[ 0 ], "-" ) +
 		"-".ljust( col_data[ 1 ], "-" ) +
-		"-".ljust( col_data[ 2 ], "-" )
+		"-".ljust( col_data[ 2 ], "-" ) +
+		"-".ljust( col_data[ 3 ], "-" )
 	)
 	# Print timer status
 	for timer in command.timers:
@@ -180,7 +188,8 @@ def print_timer_table():
 	print(
 		"-".ljust( col_data[ 0 ], "-" ) +
 		"-".ljust( col_data[ 1 ], "-" ) +
-		"-".ljust( col_data[ 2 ], "-" )
+		"-".ljust( col_data[ 2 ], "-" ) +
+		"-".ljust( col_data[ 3 ], "-" )
 	)
 	print( "* Selected Timer" )
 
@@ -189,7 +198,7 @@ def print_timer_table():
 def print_timer_status( timer_name = "", col_data = None ):
 	global command
 	
-	timer = get_timer( timer_name )
+	timer, i = get_timer( timer_name )
 	update_elapsed( timer )
 	if timer:
 		status = "running"
@@ -201,13 +210,14 @@ def print_timer_status( timer_name = "", col_data = None ):
 			if timer[ "name" ] == command.timer_name:
 				sel = "* "
 			print(
-                f"{sel}" +
-                f"{timer[ 'name' ]}".ljust( col_data[ 0 ] ) +
-                f"{status}".ljust( col_data[ 1 ] ) +
-                f"{t_msg}".ljust( col_data[ 2 ] )
-            )
+				f"{i}.".ljust( col_data[ 0 ] ) +
+				f"{sel}" +
+				f"{timer[ 'name' ]}".ljust( col_data[ 1 ] ) +
+				f"{status}".ljust( col_data[ 2 ] ) +
+				f"{t_msg}".ljust( col_data[ 3 ] )
+			)
 		else:
-			print( f"{timer[ 'name' ]} {status}, elapsed time: {t_msg}." )
+			print( f"{i}. {timer[ 'name' ]} {status}, elapsed time: {t_msg}." )
 	else:
 		print( "No timer selected." )
 		print( "Help: pytimer -h" )
@@ -280,13 +290,21 @@ def parse_args():
 	
 	# An argument is passed so use it for the timer name
 	if len( command.messages ) > 0:
-		command.timer_name = command.messages[ 0 ]
+		if command.messages[ 0 ].isdigit():
+			i = int( command.messages[ 0 ] )
+			if i < len( command.timers ):
+				command.timer_name = command.timers[ i ][ "name" ]
+			else:
+				print( f"Invalid timer index{i}" )
+		else:
+			command.timer_name = command.messages[ 0 ]
 
 
 # Load Timer Data
 def load_timer_data():
 	global command
-	filepath = "timers.json"
+	cd = os.path.dirname( os.path.abspath( __file__ ) )
+	filepath = f"{cd}/timers.json"
 	if os.path.exists( filepath ):
 		with open( filepath, "r" ) as file:
 			timer_data = json.load( file )
@@ -295,16 +313,23 @@ def load_timer_data():
 	else:
 		# Create an empty file if it doesn't exist
 		save_timer_data()
+	
+	# Make a backup of the data - if it backup doesn't exist
+	backupfile = "backups/timers-" + datetime.today().strftime( "%Y%m%d" ) + ".json"
+	if not os.path.exists( backupfile ):
+		save_timer_data( backupfile )
 
 
 # Save Timer Data
-def save_timer_data():
+def save_timer_data( local_file="timers.json" ):
 	global command
 	data = {
 		"timers": command.timers,
 		"selected_timer_name": command.timer_name
 	}
-	with open( "timers.json", "w" ) as file:
+	cd = os.path.dirname( os.path.abspath( __file__ ) )
+	filepath = f"{cd}/{local_file}"
+	with open( filepath, "w" ) as file:
 		json.dump( data, file, indent = 4 )
 
 
