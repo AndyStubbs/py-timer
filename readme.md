@@ -38,10 +38,10 @@ cd py-timer
 To run the program, execute the following command:
 
 ```sh
-python main.py
+python main.py -h
 ```
 
-This will start the Py-Timer application, and you can begin using the command-line options as described in the usage section.
+This will start the Py-Timer application and give you a list of all the command line options.
 
 ---
 
