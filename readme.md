@@ -17,7 +17,7 @@
 
 ### Prerequisites
 
-Ensure you have Python version 3.12.6 installed on your system. You can download it from the [official Python website](https://www.python.org/downloads/).
+This app was written and tested using Python version 3.12.6. You can download it from the [official Python website](https://www.python.org/downloads/).
 
 ### Cloning the Repository
 
